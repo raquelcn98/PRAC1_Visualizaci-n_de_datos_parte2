@@ -1,0 +1,625 @@
+---
+title: "Trastornos neurológicos en el mundo (1980–2023)"
+subtitle: "Evolución temporal, diferencias de género y desigualdad regional a partir del Global Burden of Disease"
+author: "Raquel Calvo Núñez"
+format: html
+---
+
+# Introducción
+
+Los trastornos neurológicos constituyen uno de los principales retos sanitarios del siglo XXI. Enfermedades como el Alzheimer, el Parkinson, la epilepsia o la migraña no solo generan mortalidad, sino que producen una elevada pérdida de calidad de vida y una gran carga social y económica.
+
+En este proyecto se utilizan datos del **Global Burden of Disease (GBD) 2023**, una de las fuentes epidemiológicas más completas a nivel mundial, para analizar cómo ha evolucionado la carga de los trastornos neurológicos desde 1980 hasta 2023, considerando diferencias por **sexo**, **región** y **tipo de enfermedad**.
+
+La visualización ha sido diseñada como una herramienta de exploración interactiva que permite responder a varias preguntas clave: cómo cambia la carga neurológica con el tiempo, qué enfermedades afectan más a hombres o mujeres, qué regiones soportan mayor impacto y qué trastornos son más letales frente a aquellos que generan mayor discapacidad.
+
+A través de gráficos interactivos, el usuario puede examinar estos patrones y comprender mejor la magnitud y la complejidad de los trastornos neurológicos a escala global.
+
+Se ha colgado todo en GitHub Pages:  https://github.com/raquelcn98/PRAC1_Visualizaci-n_de_datos_parte2
+
+# 1) Evolución temporal de la carga neurológica (1980–2023) por sexo
+
+En esta sección se analiza la evolución de la carga de los trastornos neurológicos entre 1980 y 2023, comparando **hombres** y **mujeres**. Para ello se visualizan las cuatro medidas principales del conjunto de datos: **Incidencia**, **Prevalencia**, **Muertes** y **AVISA**.  
+Se utiliza la métrica **Tasa** para facilitar la comparación a lo largo del tiempo (reduciendo el efecto del crecimiento poblacional).
+
+Además, se calcula el **ratio Incidencia/Prevalencia** como métrica derivada para interpretar la dinámica de la enfermedad: valores relativamente más altos sugieren mayor entrada de casos nuevos respecto al total existente, mientras que valores más bajos son compatibles con enfermedades de curso más largo.
+
+```{r}
+library(tidyverse)
+library(plotly)
+
+# =========================
+# CARGA Y PREPARACIÓN
+# =========================
+gbd <- read.csv("IHME-GBD_2023_DATA-dbafab79-1.csv", stringsAsFactors = FALSE)
+gbd$year <- as.integer(gbd$year)
+gbd$val  <- as.numeric(gbd$val)
+
+base <- gbd %>%
+  filter(metric_name == "Tasa",
+         sex_name %in% c("Hombre","Mujer"),
+         year >= 1980, year <= 2023)
+
+# =========================
+# PREGUNTA 1A – Evolución por medida
+# =========================
+measures <- c("Incidencia","Prevalencia","Muertes","AVISA (Años de Vida Saludable Perdidos)")
+y_labels <- c(
+  "Incidencia" = "Incidencia (Tasa)",
+  "Prevalencia" = "Prevalencia (Tasa)",
+  "Muertes" = "Muertes (Tasa)",
+  "AVISA (Años de Vida Saludable Perdidos)" = "AVISA (Tasa)"
+)
+
+df <- base %>%
+  filter(measure_name %in% measures) %>%
+  group_by(year, sex_name, measure_name) %>%
+  summarise(v = sum(val, na.rm=TRUE), .groups="drop") %>%
+  arrange(year)
+
+start_m <- "AVISA (Años de Vida Saludable Perdidos)"
+df0 <- df %>% filter(measure_name == start_m)
+
+p1 <- plot_ly(
+  df0, x=~year, y=~v, color=~sex_name,
+  type="scatter", mode="lines"
+) %>%
+  layout(
+    height = 520,
+    margin = list(t = 220, l = 70, r = 30),
+    title = list(
+      text = paste("Evolución temporal por sexo —", start_m, "(Tasa)"),
+      x = 0.5
+    ),
+    xaxis = list(title = "Año"),
+    yaxis = list(title = y_labels[[start_m]]),
+    legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25),
+    annotations = list(
+      list(text = "<b>Medida:</b>", x=0.34, y=1.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type="dropdown",
+        x=0.52, y=1.18, xref="paper", yref="paper",
+        showactive=TRUE,
+        buttons = lapply(measures, function(m){
+          d <- df %>% filter(measure_name==m)
+          list(
+            method="update",
+            label=m,
+            args=list(
+              list(
+                x=list(d$year[d$sex_name=="Hombre"], d$year[d$sex_name=="Mujer"]),
+                y=list(d$v[d$sex_name=="Hombre"], d$v[d$sex_name=="Mujer"])
+              ),
+              list(
+                title=list(text=paste("Evolución temporal por sexo —", m, "(Tasa)"), x=0.5),
+                yaxis=list(title=y_labels[[m]])
+              )
+            )
+          )
+        })
+      )
+    )
+  )
+
+p1
+
+
+# =========================
+# PREGUNTA 1B – Ratio Incidencia / Prevalencia
+# =========================
+inc <- base %>% filter(measure_name=="Incidencia") %>%
+  group_by(year, sex_name) %>% summarise(inc=sum(val), .groups="drop")
+
+prev <- base %>% filter(measure_name=="Prevalencia") %>%
+  group_by(year, sex_name) %>% summarise(prev=sum(val), .groups="drop")
+
+ratio <- inc %>% left_join(prev, by=c("year","sex_name")) %>%
+  mutate(ratio_ip = inc/prev)
+
+p_ratio <- plot_ly(
+  ratio, x=~year, y=~ratio_ip, color=~sex_name,
+  type="scatter", mode="lines"
+) %>%
+  layout(
+    title=list(text="Ratio Incidencia / Prevalencia", x=0.5),
+    xaxis=list(title="Año"),
+    yaxis=list(title="I / P"),
+    margin=list(t=120)
+  )
+
+p_ratio
+
+
+
+```
+
+# 2) Diferencias entre hombres y mujeres en la carga neurológica
+
+En esta sección se estudian las desigualdades entre hombres y mujeres en la carga de los trastornos neurológicos.  
+Para ello se define una métrica específica llamada **brecha de sexo**, calculada como:
+
+**Brecha = valor en hombres − valor en mujeres**
+
+Esta medida permite identificar qué enfermedades afectan más a un sexo que a otro y en qué regiones del mundo estas diferencias son mayores o menores.
+
+El análisis combina la dimensión epidemiológica (AVISA), la dimensión geográfica (super-regiones) y la dimensión clínica (tipo de trastorno), lo que permite detectar patrones de desigualdad que no son visibles cuando se observan únicamente los valores globales.
+
+```{r}
+# =========================
+# PREGUNTA 2: Brecha por sexo (Hombre − Mujer)
+# =========================
+measure_gap <- "AVISA (Años de Vida Saludable Perdidos)"
+
+# --- 2A) Heatmap Región x Enfermedad (año seleccionable) ---
+# --- 2A) Heatmap Región x Enfermedad (año seleccionable) ---
+measure_gap <- "AVISA (Años de Vida Saludable Perdidos)"
+
+gap_df <- base %>%
+  filter(measure_name == measure_gap) %>%
+  group_by(year, location_name, cause_name, sex_name) %>%
+  summarise(v = sum(val, na.rm=TRUE), .groups="drop") %>%
+  pivot_wider(names_from = sex_name, values_from = v) %>%
+  mutate(gap = Hombre - Mujer) %>%
+  mutate(
+    location_name = as.character(location_name),
+    cause_name    = as.character(cause_name)
+  )
+
+years <- sort(unique(gap_df$year))
+year0 <- max(years)
+
+# función para construir heatmap ORDENADO (siempre igual)
+make_heat <- function(yy){
+  d <- gap_df %>% filter(year == yy)
+
+  y_levels <- sort(unique(d$location_name))  # filas (regiones)
+  x_levels <- sort(unique(d$cause_name))     # columnas (enfermedades)
+
+  zmat <- matrix(NA_real_, nrow = length(y_levels), ncol = length(x_levels),
+                 dimnames = list(y_levels, x_levels))
+
+  for(i in seq_len(nrow(d))){
+    zmat[d$location_name[i], d$cause_name[i]] <- d$gap[i]
+  }
+
+  list(x = x_levels, y = y_levels, z = zmat)
+}
+
+h0 <- make_heat(year0)
+
+p_gap_hm <- plot_ly(
+  x = h0$x,
+  y = h0$y,
+  z = h0$z,
+  type = "heatmap",
+  hovertemplate = paste(
+    "Región: %{y}<br>",
+    "Enfermedad: %{x}<br>",
+    "Brecha (H−M): %{z:.2f}<extra></extra>"
+  )
+) %>%
+  layout(
+    height = 560,
+    margin = list(t = 200, b = 160, l = 120, r = 30),
+    title = list(
+      text = paste("Brecha por sexo (Hombre − Mujer) en", measure_gap, "—", year0),
+      x = 0.5, xanchor = "center"
+    ),
+    xaxis = list(title = "Enfermedad", automargin = TRUE),
+    yaxis = list(title = "Super-región", automargin = TRUE),
+    annotations = list(
+      list(text = "<b>Año:</b>", x=0.42, y=3.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type = "dropdown",
+        x = 0.58, y = 1.18, xref="paper", yref="paper",
+        xanchor="center", yanchor="top",
+        bgcolor="white", bordercolor="gray",
+        buttons = lapply(years, function(yy){
+          hh <- make_heat(yy)
+          list(
+            method = "update",
+            label = as.character(yy),
+            args = list(
+              list(x = list(hh$x), y = list(hh$y), z = list(hh$z)),
+              list(title = list(
+                text = paste("Brecha por sexo (Hombre − Mujer) en", measure_gap, "—", yy),
+                x = 0.5, xanchor = "center"
+              ))
+            )
+          )
+        })
+      )
+    )
+  )
+
+p_gap_hm
+
+# --- 2B) Evolución temporal de la brecha (selector Región | Enfermedad) ---
+gap_time <- base %>%
+  filter(measure_name == measure_gap) %>%
+  group_by(year, location_name, cause_name, sex_name) %>%
+  summarise(v = sum(val, na.rm=TRUE), .groups="drop") %>%
+  pivot_wider(names_from = sex_name, values_from = v) %>%
+  mutate(gap = Hombre - Mujer) %>%
+  group_by(year, location_name, cause_name) %>%
+  summarise(gap = sum(gap, na.rm=TRUE), .groups="drop") %>%
+  arrange(year)
+
+regs   <- sort(unique(gap_time$location_name))
+causas <- sort(unique(gap_time$cause_name))
+
+# Un único selector estable: "Región | Enfermedad"
+combos <- expand.grid(region = regs, causa = causas, stringsAsFactors = FALSE) %>%
+  mutate(label = paste(region, "|", causa))
+
+# Inicial
+r0 <- combos$region[1]
+c0 <- combos$causa[1]
+d0 <- gap_time %>% filter(location_name == r0, cause_name == c0) %>% arrange(year)
+
+p_gap_time <- plot_ly(
+  d0, x=~year, y=~gap, type="scatter", mode="lines",
+  hovertemplate = "Año: %{x}<br>Brecha (H−M): %{y:.2f}<extra></extra>"
+) %>%
+  layout(
+    height = 520,
+    margin = list(t = 230, b = 80, l = 70, r = 30),
+    title = list(
+      text = paste("Evolución de la brecha (H−M) —", c0, "|", r0),
+      x = 0.5, xanchor = "center"
+    ),
+    xaxis = list(title = "Año", automargin = TRUE),
+    yaxis = list(title = paste("Brecha (Hombre − Mujer) en", measure_gap), automargin = TRUE),
+    annotations = list(
+      list(text = "<b>Región | Enfermedad:</b>", x=0.38, y=2.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type="dropdown",
+        x=0.68, y=1.18, xref="paper", yref="paper",
+        xanchor="center", yanchor="top",
+        bgcolor="white", bordercolor="gray",
+        buttons = lapply(seq_len(nrow(combos)), function(i){
+          rr <- combos$region[i]
+          cc <- combos$causa[i]
+          dd <- gap_time %>% filter(location_name == rr, cause_name == cc) %>% arrange(year)
+
+          list(
+            method="update",
+            label = combos$label[i],
+            args=list(
+              list(x=list(dd$year), y=list(dd$gap)),
+              list(title=list(
+                text=paste("Evolución de la brecha (H−M) —", cc, "|", rr),
+                x=0.5, xanchor="center"
+              ))
+            )
+          )
+        })
+      )
+    )
+  )
+
+p_gap_time
+
+```
+
+# 3) Prevalencia total mundial de los trastornos neurológicos (1980–2023)
+
+En esta sección se estima la **prevalencia global** de los trastornos neurológicos sumando la prevalencia de todas las enfermedades incluidas en el conjunto de datos para cada año.  
+El objetivo es observar si la carga total (en términos de casos existentes) aumenta o disminuye desde 1980 hasta 2023, y si el patrón es distinto entre **hombres** y **mujeres**.
+
+A diferencia de la incidencia (casos nuevos), la prevalencia refleja el “volumen acumulado” de personas que conviven con estos trastornos, por lo que es una medida útil para entender el impacto sostenido sobre sistemas sanitarios y calidad de vida.
+
+
+```{r}
+# =========================
+# PREGUNTA 3 – Prevalencia por región y sexo
+# =========================
+prev_region <- base %>%
+  filter(measure_name == "Prevalencia") %>%
+  group_by(year, location_name, sex_name) %>%
+  summarise(prev = sum(val, na.rm=TRUE), .groups="drop") %>%
+  arrange(year)
+
+regions <- sort(unique(prev_region$location_name))
+r0 <- regions[1]
+d0 <- prev_region %>% filter(location_name == r0)
+
+p3_region <- plot_ly(
+  d0, x=~year, y=~prev, color=~sex_name,
+  type="scatter", mode="lines",
+  hovertemplate = "Año: %{x}<br>Sexo: %{legendgroup}<br>Prevalencia: %{y:.2f}<extra></extra>"
+) %>%
+  layout(
+    height = 520,
+    margin = list(t = 200),
+    title = list(text = paste("Prevalencia neurológica —", r0), x=0.5),
+    xaxis = list(title="Año"),
+    yaxis = list(title="Prevalencia (Tasa)"),
+    annotations = list(
+      list(text="<b>Región:</b>", x=0.4, y=1.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type="dropdown",
+        x=0.6, y=1.18, xref="paper", yref="paper",
+        buttons = lapply(regions, function(r){
+          d <- prev_region %>% filter(location_name == r)
+          list(
+            method="update",
+            label=r,
+            args=list(
+              list(x=list(d$year), y=list(d$prev)),
+              list(title=list(text=paste("Prevalencia neurológica —", r), x=0.5))
+            )
+          )
+        })
+      )
+    )
+  )
+
+p3_region
+
+
+```
+
+# 4) Carga neurológica por super-región: comparación entre regiones
+
+En esta sección se compara la carga de los trastornos neurológicos entre super-regiones epidemiológicas.  
+Se utiliza **AVISA (Años de Vida Saludable Perdidos)** como indicador de carga total, y la métrica **Tasa** para poder comparar regiones de forma más justa.
+
+La visualización permite identificar qué regiones concentran mayor carga y cómo cambia el ranking al modificar el año analizado.
+
+
+```{r}
+# =========================
+# PREGUNTA 4 – Carga por super-región (ranking)
+# =========================
+measure4 <- "AVISA (Años de Vida Saludable Perdidos)"
+
+df4 <- base %>%
+  filter(measure_name == measure4) %>%
+  group_by(year, location_name, sex_name) %>%
+  summarise(v = sum(val, na.rm = TRUE), .groups = "drop")
+
+years4 <- sort(unique(df4$year))
+y0 <- max(years4)
+
+# Por defecto: total (H+M) en el año más reciente
+df4_total <- df4 %>%
+  group_by(year, location_name) %>%
+  summarise(v = sum(v, na.rm = TRUE), .groups = "drop")
+
+d0 <- df4_total %>% filter(year == y0) %>% arrange(v)
+
+p4 <- plot_ly(
+  d0,
+  x = ~v,
+  y = ~reorder(location_name, v),
+  type = "bar",
+  orientation = "h",
+  hovertemplate = paste(
+    "Región: %{y}<br>",
+    "AVISA (Tasa): %{x:.2f}<extra></extra>"
+  )
+) %>%
+  layout(
+    height = 560,
+    margin = list(t = 230, b = 60, l = 170, r = 30),
+    title = list(
+      text = paste("Ranking de carga neurológica por super-región —", y0, "(AVISA, Tasa)"),
+      x = 0.5, xanchor = "center"
+    ),
+    xaxis = list(title = "AVISA (Tasa)", automargin = TRUE),
+    yaxis = list(title = "", automargin = TRUE),
+    annotations = list(
+      list(text = "<b>Año:</b>", x=0.42, y=1.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type = "dropdown",
+        x = 0.58, y = 1.18, xref = "paper", yref = "paper",
+        xanchor = "center", yanchor = "top",
+        bgcolor = "white", bordercolor = "gray",
+        buttons = lapply(years4, function(yy){
+          dd <- df4_total %>% filter(year == yy) %>% arrange(v)
+          list(
+            method = "update",
+            label = as.character(yy),
+            args = list(
+              list(x = list(dd$v), y = list(reorder(dd$location_name, dd$v))),
+              list(title = list(
+                text = paste("Ranking de carga neurológica por super-región —", yy, "(AVISA, Tasa)"),
+                x = 0.5, xanchor = "center"
+              ))
+            )
+          )
+        })
+      )
+    )
+  )
+
+p4
+
+```
+# 5) Trastornos neurológicos más frecuentes por super-región
+
+En esta sección se analiza qué trastornos neurológicos son más frecuentes en cada super-región utilizando la medida de **Prevalencia**.  
+El objetivo es identificar qué enfermedades dominan en cada zona del mundo y si existen patrones regionales claros. La visualización permite cambiar el año para explorar si la composición se mantiene estable o cambia con el tiempo.
+
+```{r}
+# =========================
+# PREGUNTA 5 – Trastornos más frecuentes por super-región (Prevalencia)
+# =========================
+df5 <- base %>%
+  filter(measure_name == "Prevalencia") %>%
+  group_by(year, location_name, cause_name) %>%
+  summarise(prev = sum(val, na.rm = TRUE), .groups = "drop")
+
+years5 <- sort(unique(df5$year))
+y0 <- max(years5)
+
+# Función: Top N por región para un año
+topN <- function(yy, N=5){
+  df5 %>%
+    filter(year == yy) %>%
+    group_by(location_name) %>%
+    slice_max(prev, n = N, with_ties = FALSE) %>%
+    ungroup()
+}
+
+d0 <- topN(y0, 5)
+
+p5 <- plot_ly(
+  d0,
+  x = ~location_name,
+  y = ~prev,
+  color = ~cause_name,
+  type = "bar",
+  hovertemplate = paste(
+    "Región: %{x}<br>",
+    "Trastorno: %{legendgroup}<br>",
+    "Prevalencia (Tasa): %{y:.2f}<extra></extra>"
+  )
+) %>%
+  layout(
+    barmode = "stack",
+    height = 620,
+    margin = list(t = 230, b = 140, l = 70, r = 30),
+    title = list(
+      text = paste("Top trastornos por prevalencia en cada super-región —", y0),
+      x = 0.5, xanchor = "center"
+    ),
+    xaxis = list(title = "Super-región", tickangle = -35, automargin = TRUE),
+    yaxis = list(title = "Prevalencia (Tasa)", automargin = TRUE),
+    annotations = list(
+      list(text = "<b>Año:</b>", x=0.42, y=2.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type = "dropdown",
+        x = 0.58, y = 1.18, xref = "paper", yref = "paper",
+        xanchor="center", yanchor="top",
+        bgcolor="white", bordercolor="gray",
+        buttons = lapply(years5, function(yy){
+          dd <- topN(yy, 5)
+          list(
+            method = "update",
+            label = as.character(yy),
+            args = list(
+              list(x = list(dd$location_name), y = list(dd$prev), color = list(dd$cause_name)),
+              list(title = list(
+                text = paste("Top trastornos por prevalencia en cada super-región —", yy),
+                x = 0.5, xanchor = "center"
+              ))
+            )
+          )
+        })
+      )
+    )
+  )
+
+p5
+
+```
+
+
+
+
+# 6) Mortalidad vs discapacidad: Muertes frente a AVISA
+
+En esta sección se compara el impacto de los trastornos neurológicos en dos dimensiones: **mortalidad** (Muertes) y **discapacidad/carga total** (AVISA).  
+La visualización permite identificar enfermedades más letales (altas muertes) frente a enfermedades que generan mucha pérdida de vida saludable sin necesariamente causar muchas muertes (alto AVISA con baja mortalidad).  
+El tamaño del punto representa la **Prevalencia**, para añadir contexto sobre cuán extendido está cada trastorno.
+
+
+```{r}
+# =========================
+# PREGUNTA 6 – Muertes vs AVISA (tamaño = Prevalencia)
+# =========================
+
+# Agregamos H+M para simplificar y comparar enfermedades
+df6_deaths <- base %>%
+  filter(measure_name == "Muertes") %>%
+  group_by(year, cause_name) %>%
+  summarise(deaths = sum(val, na.rm = TRUE), .groups = "drop")
+
+df6_dalys <- base %>%
+  filter(measure_name == "AVISA (Años de Vida Saludable Perdidos)") %>%
+  group_by(year, cause_name) %>%
+  summarise(dalys = sum(val, na.rm = TRUE), .groups = "drop")
+
+df6_prev <- base %>%
+  filter(measure_name == "Prevalencia") %>%
+  group_by(year, cause_name) %>%
+  summarise(prev = sum(val, na.rm = TRUE), .groups = "drop")
+
+df6 <- df6_deaths %>%
+  left_join(df6_dalys, by = c("year","cause_name")) %>%
+  left_join(df6_prev,  by = c("year","cause_name")) %>%
+  replace_na(list(prev = 0))
+
+years6 <- sort(unique(df6$year))
+y0 <- max(years6)
+d0 <- df6 %>% filter(year == y0)
+
+p6 <- plot_ly(
+  d0,
+  x = ~deaths,
+  y = ~dalys,
+  text = ~cause_name,
+  type = "scatter",
+  mode = "markers",
+  size = ~prev,
+  sizes = c(10, 60),
+  hovertemplate = paste(
+    "<b>%{text}</b><br>",
+    "Muertes (Tasa): %{x:.2f}<br>",
+    "AVISA (Tasa): %{y:.2f}<br>",
+    "Prevalencia (Tasa): %{marker.size:.2f}<extra></extra>"
+  )
+) %>%
+  layout(
+    height = 620,
+    margin = list(t = 200, b = 80, l = 80, r = 30),
+    title = list(
+      text = paste("Muertes vs AVISA (Tasa) —", y0, "(tamaño = Prevalencia)"),
+      x = 0.5, xanchor = "center"
+    ),
+    xaxis = list(title = "Muertes (Tasa)", automargin = TRUE),
+    yaxis = list(title = "AVISA (Tasa)", automargin = TRUE),
+    annotations = list(
+      list(text = "<b>Año:</b>", x=0.42, y=1.18, xref="paper", yref="paper", showarrow=FALSE)
+    ),
+    updatemenus = list(
+      list(
+        type = "dropdown",
+        x = 0.58, y = 1.18, xref = "paper", yref = "paper",
+        xanchor = "center", yanchor = "top",
+        bgcolor = "white", bordercolor = "gray",
+        buttons = lapply(years6, function(yy){
+          dd <- df6 %>% filter(year == yy)
+          list(
+            method = "update",
+            label = as.character(yy),
+            args = list(
+              list(x = list(dd$deaths), y = list(dd$dalys), text = list(dd$cause_name),
+                   marker = list(size = dd$prev)),
+              list(title = list(
+                text = paste("Muertes vs AVISA (Tasa) —", yy, "(tamaño = Prevalencia)"),
+                x = 0.5, xanchor = "center"
+              ))
+            )
+          )
+        })
+      )
+    )
+  )
+
+p6
+```
